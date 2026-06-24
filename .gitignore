@@ -24,6 +24,7 @@ data/
 
 # IDE and OS files
 .idea/
+.vscode/
 *.code-workspace
 .DS_Store
 Thumbs.db
@@ -58,3 +59,6 @@ COPILOT.md
 docs/prompts/
 docs/cline-windows-setup.md
 README_ARCHIVE.md
+docs/ACCEPTANCE_CRITERIA.md
+docs/BOT_ARCHITECTURE_DRAFT.md
+docs/ROADMAP.md

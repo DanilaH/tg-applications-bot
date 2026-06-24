@@ -1,9 +1,8 @@
-# Telegram booking bot
+﻿# Telegram booking bot
 
 Portfolio demo of a Telegram bot that collects booking requests for a local
-business. The project is currently at the bootstrap stage: configuration,
-application startup, linting, and tests are available; the booking flow will be
-added in later features.
+business. The bot currently supports the `/start` command and displays the main
+menu with a booking button. The booking flow will be added in later features.
 
 ## Stack
 
@@ -42,8 +41,9 @@ With the virtual environment active:
 python -m bot.main
 ```
 
-The current version starts long polling but does not register handlers yet.
-Stop it with `Ctrl+C`.
+Send `/start` to the bot to see the welcome message and the main menu. The
+booking button will become active when service selection is added in the next
+feature. Stop polling with `Ctrl+C`.
 
 ## Checks
 
