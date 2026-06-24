@@ -1,0 +1,60 @@
+﻿# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv/
+venv/
+
+# Python caches and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Local data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE and OS files
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# AI coding agents and local prompts
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+COPILOT.md
+*-prompt.md
+.agents/
+.agent/
+.ai/
+.codex/
+.clinerules/
+.cline/
+.cursor/
+.cursorignore
+.cursorrules
+.windsurf/
+.windsurfrules
+.continue/
+.aider*
+.roo/
+.roomodes
+.augment/
+.amazonq/
+.qodo/
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+docs/prompts/
+docs/cline-windows-setup.md
+README_ARCHIVE.md
