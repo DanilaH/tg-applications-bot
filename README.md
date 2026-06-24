@@ -1,8 +1,27 @@
 ﻿# Telegram booking bot
 
 Portfolio demo of a Telegram bot that collects booking requests for a local
-business. The bot currently supports the `/start` command and displays the main
-menu with a booking button. The booking flow will be added in later features.
+business. The bot supports a multi-step booking flow: service selection → name →
+phone → comment → confirmation (summary to be added).
+
+## Current flow
+
+```
+/start
+→ кнопка "Записаться"
+→ inline-кнопки: выбор услуги
+→ ввод имени (текст, 2–80 символов)
+→ ввод телефона (текст или Telegram contact, кнопка «Отмена»)
+→ комментарий (текст до 500 символов, кнопка «Пропустить», «Отмена»)
+→ данные собраны, ожидание подтверждения
+```
+
+Услуги для demo:
+
+- `men_haircut` — Мужская стрижка
+- `beard_trim` — Борода и контур
+- `combo` — Стрижка + борода
+- `consultation` — Консультация
 
 ## Stack
 
@@ -41,9 +60,8 @@ With the virtual environment active:
 python -m bot.main
 ```
 
-Send `/start` to the bot to see the welcome message and the main menu. The
-booking button will become active when service selection is added in the next
-feature. Stop polling with `Ctrl+C`.
+Send `/start` to the bot to see the welcome message and the main menu.
+Stop polling with `Ctrl+C`.
 
 ## Checks
 
