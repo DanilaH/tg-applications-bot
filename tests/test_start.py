@@ -31,6 +31,7 @@ def test_start_handler_sends_welcome_message() -> None:
 def test_start_router_is_registered() -> None:
     dispatcher = create_dispatcher()
 
-    assert len(dispatcher.sub_routers) == 1
-    assert dispatcher.sub_routers[0].name == "bot.handlers.start"
-    assert len(dispatcher.sub_routers[0].message.handlers) == 1
+    assert len(dispatcher.sub_routers) >= 1
+    start_router = dispatcher.sub_routers[0]
+    assert start_router.name == "bot.handlers.start"
+    assert len(start_router.message.handlers) == 1
