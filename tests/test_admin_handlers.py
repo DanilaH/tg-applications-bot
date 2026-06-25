@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,23 +18,21 @@ def settings():
     )
 
 
-@pytest.mark.asyncio
-async def test_handle_admin_booking_action_unauthorized(settings):
+def test_handle_admin_booking_action_unauthorized(settings):
     callback = AsyncMock(spec=CallbackQuery)
     callback.from_user = MagicMock(spec=User)
     callback.from_user.id = 111  # Not admin
     callback.data = "admin:booking:accept:1"
     callback.answer = AsyncMock()
 
-    await handle_admin_booking_action(callback, settings)
+    asyncio.run(handle_admin_booking_action(callback, settings))
 
     callback.answer.assert_called_once_with(
         "Это действие доступно только администратору.", show_alert=True
     )
 
 
-@pytest.mark.asyncio
-async def test_handle_admin_booking_action_accept_success(settings, monkeypatch):
+def test_handle_admin_booking_action_accept_success(settings, monkeypatch):
     callback = AsyncMock(spec=CallbackQuery)
     callback.from_user = MagicMock(spec=User)
     callback.from_user.id = 999  # Admin
@@ -44,7 +43,7 @@ async def test_handle_admin_booking_action_accept_success(settings, monkeypatch)
     mock_update = MagicMock(return_value=True)
     monkeypatch.setattr("bot.handlers.admin.update_booking_status", mock_update)
 
-    await handle_admin_booking_action(callback, settings)
+    asyncio.run(handle_admin_booking_action(callback, settings))
 
     mock_update.assert_called_once_with(
         database_url=settings.database_url,
@@ -56,8 +55,7 @@ async def test_handle_admin_booking_action_accept_success(settings, monkeypatch)
     callback.answer.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_handle_admin_booking_action_decline_success(settings, monkeypatch):
+def test_handle_admin_booking_action_decline_success(settings, monkeypatch):
     callback = AsyncMock(spec=CallbackQuery)
     callback.from_user = MagicMock(spec=User)
     callback.from_user.id = 999  # Admin
@@ -68,7 +66,7 @@ async def test_handle_admin_booking_action_decline_success(settings, monkeypatch
     mock_update = MagicMock(return_value=True)
     monkeypatch.setattr("bot.handlers.admin.update_booking_status", mock_update)
 
-    await handle_admin_booking_action(callback, settings)
+    asyncio.run(handle_admin_booking_action(callback, settings))
 
     mock_update.assert_called_once_with(
         database_url=settings.database_url,
@@ -80,8 +78,7 @@ async def test_handle_admin_booking_action_decline_success(settings, monkeypatch
     callback.answer.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_handle_admin_booking_action_not_found(settings, monkeypatch):
+def test_handle_admin_booking_action_not_found(settings, monkeypatch):
     callback = AsyncMock(spec=CallbackQuery)
     callback.from_user = MagicMock(spec=User)
     callback.from_user.id = 999  # Admin
@@ -91,13 +88,12 @@ async def test_handle_admin_booking_action_not_found(settings, monkeypatch):
     mock_update = MagicMock(return_value=False)
     monkeypatch.setattr("bot.handlers.admin.update_booking_status", mock_update)
 
-    await handle_admin_booking_action(callback, settings)
+    asyncio.run(handle_admin_booking_action(callback, settings))
 
     callback.answer.assert_called_once_with("Заявка не найдена.", show_alert=True)
 
 
-@pytest.mark.asyncio
-async def test_handle_admin_booking_action_repository_error(settings, monkeypatch):
+def test_handle_admin_booking_action_repository_error(settings, monkeypatch):
     callback = AsyncMock(spec=CallbackQuery)
     callback.from_user = MagicMock(spec=User)
     callback.from_user.id = 999  # Admin
@@ -107,6 +103,6 @@ async def test_handle_admin_booking_action_repository_error(settings, monkeypatc
     mock_update = MagicMock(side_effect=BookingRepositoryError("DB Error"))
     monkeypatch.setattr("bot.handlers.admin.update_booking_status", mock_update)
 
-    await handle_admin_booking_action(callback, settings)
+    asyncio.run(handle_admin_booking_action(callback, settings))
 
     callback.answer.assert_called_once_with("Не удалось обновить статус заявки.", show_alert=True)

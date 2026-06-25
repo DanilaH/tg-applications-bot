@@ -566,6 +566,14 @@ class TestConfirmation:
         assert "<code>1</code>" in kwargs["text"]
         assert data["customer_name"] in kwargs["text"]
         assert "Test" in kwargs["text"]
+        assert kwargs["reply_markup"] is not None
+        # Check that it's an InlineKeyboardMarkup with admin action buttons
+        markup = kwargs["reply_markup"]
+        assert any(
+            "admin:booking:accept:1" in button.callback_data
+            for row in markup.inline_keyboard
+            for button in row
+        )
 
         assert asyncio.run(state.get_state()) is None
         assert asyncio.run(state.get_data()) == {}
