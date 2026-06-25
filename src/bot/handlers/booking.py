@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, ContentType, Message
 
 from bot.config import Settings
 from bot.keyboards.booking import (
+    build_admin_booking_keyboard,
     build_comment_keyboard,
     build_confirmation_keyboard,
     build_name_keyboard,
@@ -226,6 +227,7 @@ async def handle_booking_confirm(
             bot=bot,
             admin_chat_id=settings.admin_chat_id,
             text=admin_text,
+            reply_markup=build_admin_booking_keyboard(booking_id),
         )
     except TelegramAPIError:
         logger.error("Failed to send admin notification due to Telegram API error")

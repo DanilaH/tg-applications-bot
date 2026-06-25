@@ -7,6 +7,7 @@ from bot.repositories.booking_repository import (
     BookingRepositoryError,
     create_booking,
     init_database,
+    update_booking_status,
 )
 
 
@@ -68,3 +69,45 @@ def test_create_booking_returns_id_and_persists_row(tmp_path) -> None:
 def test_invalid_database_url_raises_repository_error() -> None:
     with pytest.raises(BookingRepositoryError):
         init_database("postgresql://localhost/bookings")
+
+
+def test_update_booking_status_success(tmp_path) -> None:
+    database_url = _database_url(tmp_path)
+    init_database(database_url)
+    booking_id = create_booking(database_url, _booking())
+
+    # Update to accepted
+    success = update_booking_status(database_url, booking_id, "accepted")
+    assert success is True
+
+    db_path = tmp_path / "bookings.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        status = connection.execute(
+            "SELECT status FROM bookings WHERE id = ?", (booking_id,)
+        ).fetchone()[0]
+    assert status == "accepted"
+
+    # Update to declined
+    success = update_booking_status(database_url, booking_id, "declined")
+    assert success is True
+    with sqlite3.connect(db_path) as connection:
+        status = connection.execute(
+            "SELECT status FROM bookings WHERE id = ?", (booking_id,)
+        ).fetchone()[0]
+    assert status == "declined"
+
+
+def test_update_booking_status_not_found(tmp_path) -> None:
+    database_url = _database_url(tmp_path)
+    init_database(database_url)
+
+    success = update_booking_status(database_url, 999, "accepted")
+    assert success is False
+
+
+def test_update_booking_status_invalid_status(tmp_path) -> None:
+    database_url = _database_url(tmp_path)
+    init_database(database_url)
+
+    with pytest.raises(BookingRepositoryError, match="Invalid booking status"):
+        update_booking_status(database_url, 1, "pending")

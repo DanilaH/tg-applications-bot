@@ -673,9 +673,9 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        assert len(dispatcher.sub_routers) == 2
+        assert len(dispatcher.sub_routers) == 3
 
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         assert booking_router.name == "bot.handlers.booking"
         # 5 callback + 9 message handlers
         assert len(booking_router.callback_query.handlers) == 5
@@ -687,7 +687,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = {
             handler.callback.__name__: handler for handler in booking_router.callback_query.handlers
         }
@@ -702,15 +702,15 @@ class TestRouter:
 
         d1 = create_dispatcher()
         d2 = create_dispatcher()
-        assert len(d1.sub_routers) == 2
-        assert len(d2.sub_routers) == 2
+        assert len(d1.sub_routers) == 3
+        assert len(d2.sub_routers) == 3
 
     def test_text_cancel_registered_before_name_input(self) -> None:
         """Cancel handler must be registered first so it takes priority."""
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         # First handler should be text cancel
@@ -722,7 +722,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         cancel_handler = handlers[0]
@@ -739,7 +739,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         # Find skip_comment and comment_input positions
@@ -753,7 +753,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         names = [h.callback.__name__ for h in handlers]
@@ -768,7 +768,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         names = [h.callback.__name__ for h in handlers]

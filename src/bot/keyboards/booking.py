@@ -106,5 +106,22 @@ def build_comment_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def build_admin_booking_keyboard(booking_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Принять",
+                    callback_data=f"admin:booking:accept:{booking_id}",
+                ),
+                InlineKeyboardButton(
+                    text="Отклонить",
+                    callback_data=f"admin:booking:decline:{booking_id}",
+                ),
+            ]
+        ]
+    )
+
+
 def build_remove_reply() -> ReplyKeyboardRemove:
     return ReplyKeyboardRemove()
