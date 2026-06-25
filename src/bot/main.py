@@ -15,7 +15,7 @@ def configure_logging() -> None:
 async def run() -> None:
     settings = get_settings()
     bot = create_bot(settings)
-    dispatcher = create_dispatcher()
+    dispatcher = create_dispatcher(settings)
 
     try:
         await dispatcher.start_polling(bot)

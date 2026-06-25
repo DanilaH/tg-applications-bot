@@ -9,8 +9,10 @@ def create_bot(settings: Settings) -> Bot:
     return Bot(token=settings.bot_token.get_secret_value())
 
 
-def create_dispatcher() -> Dispatcher:
+def create_dispatcher(settings: Settings | None = None) -> Dispatcher:
     dispatcher = Dispatcher()
+    if settings:
+        dispatcher["settings"] = settings
     dispatcher.include_router(create_start_router())
     dispatcher.include_router(create_booking_router())
     return dispatcher
