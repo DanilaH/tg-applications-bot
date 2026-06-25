@@ -1,10 +1,14 @@
+import datetime
+import logging
 import re
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ContentType, Message
 
+from bot.config import Settings
 from bot.keyboards.booking import (
     build_comment_keyboard,
     build_confirmation_keyboard,
@@ -15,9 +19,12 @@ from bot.keyboards.booking import (
 )
 from bot.keyboards.main_menu import build_main_menu
 from bot.services.catalog import get_service
+from bot.services.notification_service import send_admin_notification
 from bot.states.booking import BookingState
 from bot.utils.phone import normalize_phone
-from bot.utils.text import format_booking_summary
+from bot.utils.text import format_admin_booking_message, format_booking_summary
+
+logger = logging.getLogger(__name__)
 
 SERVICE_PROMPT = "Выберите услугу:"
 NAME_PROMPT_TEMPLATE = "Вы выбрали: {service_name}\n\nТеперь введите ваше имя:"
@@ -103,9 +110,63 @@ async def handle_inline_cancel(callback: CallbackQuery, state: FSMContext) -> No
     await callback.answer()
 
 
-async def handle_booking_confirm(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(BookingState.ready_to_submit)
-    await callback.message.edit_text(READY_TO_SUBMIT_MESSAGE, reply_markup=None)
+async def handle_booking_confirm(
+    callback: CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+    settings: Settings,
+) -> None:
+    data = await state.get_data()
+    user = callback.from_user
+    created_at = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        admin_text = format_admin_booking_message(
+            data=data,
+            user_id=user.id,
+            username=user.username,
+            created_at_utc=created_at,
+        )
+    except ValueError:
+        await state.clear()
+        from bot.handlers.start import WELCOME_TEXT
+
+        await callback.message.answer(
+            INCOMPLETE_BOOKING_MESSAGE,
+            reply_markup=build_remove_reply(),
+        )
+        await callback.message.answer(
+            WELCOME_TEXT,
+            reply_markup=build_main_menu(),
+        )
+        await callback.answer()
+        return
+
+    try:
+        await send_admin_notification(
+            bot=bot,
+            admin_chat_id=settings.admin_chat_id,
+            text=admin_text,
+        )
+    except TelegramAPIError:
+        logger.error("Failed to send admin notification due to Telegram API error")
+        await callback.message.answer(
+            "Произошла ошибка при отправке заявки. Пожалуйста, попробуйте ещё раз позже."
+        )
+        await callback.answer()
+        return
+
+    await state.clear()
+    from bot.handlers.start import WELCOME_TEXT
+
+    await callback.message.edit_text(
+        "Заявка отправлена. Администратор скоро свяжется с вами.",
+        reply_markup=None,
+    )
+    await callback.message.answer(
+        WELCOME_TEXT,
+        reply_markup=build_main_menu(),
+    )
     await callback.answer()
 
 
