@@ -76,6 +76,7 @@ def test_format_admin_booking_message_full_data() -> None:
         user_id=123,
         username="ivan_test",
         created_at_utc="2024-01-01 12:00:00",
+        booking_id=42,
     )
 
     assert "<b>Новая заявка</b>" in msg

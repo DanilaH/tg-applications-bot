@@ -7,11 +7,13 @@ from bot.config import Settings
 def test_settings_load_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BOT_TOKEN", "123456:TEST_TOKEN")
     monkeypatch.setenv("ADMIN_CHAT_ID", "987654321")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///custom/bookings.sqlite3")
 
     settings = Settings(_env_file=None)
 
     assert settings.bot_token.get_secret_value() == "123456:TEST_TOKEN"
     assert settings.admin_chat_id == 987654321
+    assert settings.database_url == "sqlite:///custom/bookings.sqlite3"
 
 
 def test_settings_require_bot_token_and_admin_chat_id(
@@ -37,3 +39,13 @@ def test_settings_do_not_reveal_bot_token(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert token not in str(settings)
     assert token not in repr(settings)
+
+
+def test_settings_database_url_has_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOT_TOKEN", "123456:TEST_TOKEN")
+    monkeypatch.setenv("ADMIN_CHAT_ID", "987654321")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.database_url == "sqlite:///data/bookings.sqlite3"

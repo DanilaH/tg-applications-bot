@@ -3,6 +3,7 @@ import logging
 
 from bot.config import get_settings
 from bot.loader import create_bot, create_dispatcher
+from bot.repositories.booking_repository import init_database
 
 
 def configure_logging() -> None:
@@ -14,6 +15,7 @@ def configure_logging() -> None:
 
 async def run() -> None:
     settings = get_settings()
+    init_database(settings.database_url)
     bot = create_bot(settings)
     dispatcher = create_dispatcher(settings)
 

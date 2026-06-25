@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     bot_token: SecretStr
     admin_chat_id: int
+    database_url: str = "sqlite:///data/bookings.sqlite3"
 
     model_config = SettingsConfigDict(
         env_file=".env",

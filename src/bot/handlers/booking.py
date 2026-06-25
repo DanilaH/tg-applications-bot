@@ -18,6 +18,11 @@ from bot.keyboards.booking import (
     build_service_keyboard,
 )
 from bot.keyboards.main_menu import build_main_menu
+from bot.repositories.booking_repository import (
+    BookingCreate,
+    BookingRepositoryError,
+    create_booking,
+)
 from bot.services.catalog import get_service
 from bot.services.notification_service import send_admin_notification
 from bot.states.booking import BookingState
@@ -36,6 +41,11 @@ INCOMPLETE_BOOKING_MESSAGE = "Не удалось собрать заявку. �
 NON_TEXT_ERROR = "Пожалуйста, отправьте текст."
 EMPTY_COMMENT_ERROR = "Комментарий пустой. Напишите текст или нажмите «Пропустить»."
 CANCEL_MESSAGE = "Запись отменена."
+BOOKING_STORAGE_ERROR_MESSAGE = "Не удалось сохранить заявку. Пожалуйста, попробуйте ещё раз позже."
+BOOKING_NOTIFICATION_ERROR_MESSAGE = (
+    "Произошла ошибка при отправке заявки. Пожалуйста, попробуйте ещё раз позже."
+)
+BOOKING_SUCCESS_MESSAGE = "Заявка отправлена. Администратор скоро свяжется с вами."
 
 
 def _normalize_name(raw: str) -> str | None:
@@ -110,6 +120,51 @@ async def handle_inline_cancel(callback: CallbackQuery, state: FSMContext) -> No
     await callback.answer()
 
 
+def _utc_timestamp() -> str:
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _required_booking_text(data: dict[str, object], key: str) -> str:
+    value = data.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Missing booking field: {key}")
+    return value.strip()
+
+
+def _booking_comment(data: dict[str, object]) -> str | None:
+    value = data.get("comment")
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise ValueError("Invalid booking field: comment")
+
+
+def _existing_booking_id(data: dict[str, object]) -> int | None:
+    value = data.get("booking_id")
+    if isinstance(value, int) and value > 0:
+        return value
+    return None
+
+
+def _build_booking_create(
+    data: dict[str, object],
+    user_id: int,
+    username: str | None,
+    created_at_utc: str,
+) -> BookingCreate:
+    return BookingCreate(
+        service_id=_required_booking_text(data, "service_id"),
+        service_name=_required_booking_text(data, "service_name"),
+        customer_name=_required_booking_text(data, "customer_name"),
+        phone=_required_booking_text(data, "phone"),
+        comment=_booking_comment(data),
+        telegram_user_id=user_id,
+        telegram_username=username,
+        created_at_utc=created_at_utc,
+    )
+
+
 async def handle_booking_confirm(
     callback: CallbackQuery,
     state: FSMContext,
@@ -118,14 +173,33 @@ async def handle_booking_confirm(
 ) -> None:
     data = await state.get_data()
     user = callback.from_user
-    created_at = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
+    user_id = int(user.id)
+    username = user.username
 
     try:
+        booking_id = _existing_booking_id(data)
+        created_at_value = data.get("booking_created_at_utc")
+        created_at = created_at_value if isinstance(created_at_value, str) else _utc_timestamp()
+
+        if booking_id is None:
+            booking = _build_booking_create(
+                data=data,
+                user_id=user_id,
+                username=username,
+                created_at_utc=created_at,
+            )
+            booking_id = create_booking(settings.database_url, booking)
+            await state.update_data(
+                booking_id=booking_id,
+                booking_created_at_utc=created_at,
+            )
+
         admin_text = format_admin_booking_message(
             data=data,
-            user_id=user.id,
-            username=user.username,
+            user_id=user_id,
+            username=username,
             created_at_utc=created_at,
+            booking_id=booking_id,
         )
     except ValueError:
         await state.clear()
@@ -141,6 +215,11 @@ async def handle_booking_confirm(
         )
         await callback.answer()
         return
+    except BookingRepositoryError:
+        logger.error("Failed to save booking due to SQLite error")
+        await callback.message.answer(BOOKING_STORAGE_ERROR_MESSAGE)
+        await callback.answer()
+        return
 
     try:
         await send_admin_notification(
@@ -150,9 +229,7 @@ async def handle_booking_confirm(
         )
     except TelegramAPIError:
         logger.error("Failed to send admin notification due to Telegram API error")
-        await callback.message.answer(
-            "Произошла ошибка при отправке заявки. Пожалуйста, попробуйте ещё раз позже."
-        )
+        await callback.message.answer(BOOKING_NOTIFICATION_ERROR_MESSAGE)
         await callback.answer()
         return
 
@@ -160,7 +237,7 @@ async def handle_booking_confirm(
     from bot.handlers.start import WELCOME_TEXT
 
     await callback.message.edit_text(
-        "Заявка отправлена. Администратор скоро свяжется с вами.",
+        BOOKING_SUCCESS_MESSAGE,
         reply_markup=None,
     )
     await callback.message.answer(

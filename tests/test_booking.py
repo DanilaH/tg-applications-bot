@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -10,6 +11,9 @@ from pydantic import SecretStr
 
 from bot.config import Settings
 from bot.handlers.booking import (
+    BOOKING_NOTIFICATION_ERROR_MESSAGE,
+    BOOKING_STORAGE_ERROR_MESSAGE,
+    BOOKING_SUCCESS_MESSAGE,
     CANCEL_MESSAGE,
     COMMENT_PROMPT,
     CONFIRMING_MESSAGE,
@@ -45,6 +49,7 @@ from bot.keyboards.booking import (
     build_service_keyboard,
 )
 from bot.keyboards.main_menu import build_main_menu
+from bot.repositories.booking_repository import init_database
 from bot.services.catalog import ALLOWED_SERVICE_IDS, ALLOWED_SERVICES, get_service
 from bot.states.booking import BookingState
 from bot.utils.phone import normalize_phone
@@ -217,6 +222,9 @@ class TestKeyboards:
 def callback() -> AsyncMock:
     cb = AsyncMock()
     cb.message = AsyncMock()
+    cb.from_user = MagicMock()
+    cb.from_user.id = 123
+    cb.from_user.username = "test_user"
     return cb
 
 
@@ -515,14 +523,24 @@ class TestCommentInput:
 
 class TestConfirmation:
     @pytest.fixture
-    def settings(self) -> Settings:
+    def settings(self, tmp_path) -> Settings:
+        database_url = f"sqlite:///{(tmp_path / 'bookings.sqlite3').as_posix()}"
+        init_database(database_url)
         return Settings(
             bot_token=SecretStr("123:abc"),
             admin_chat_id=98765,
+            database_url=database_url,
             _env_file=None,
         )
 
-    def test_confirm_success_clears_fsm_and_shows_success(
+    @staticmethod
+    def _booking_rows(settings: Settings) -> list[sqlite3.Row]:
+        db_path = settings.database_url.removeprefix("sqlite:///")
+        with sqlite3.connect(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            return list(connection.execute("SELECT * FROM bookings ORDER BY id"))
+
+    def test_confirm_success_saves_booking_notifies_admin_and_clears_fsm(
         self, callback: AsyncMock, state: FSMContext, settings: Settings
     ) -> None:
         data = {**_complete_booking_data(), "comment": "Test"}
@@ -530,24 +548,29 @@ class TestConfirmation:
         asyncio.run(state.set_state(BookingState.confirming))
 
         bot = AsyncMock()
-        callback.from_user.username = "test_user"
 
         asyncio.run(handle_booking_confirm(callback, state, bot, settings))
 
-        # Admin notified
+        rows = self._booking_rows(settings)
+        assert len(rows) == 1
+        assert rows[0]["service_id"] == "combo"
+        assert rows[0]["customer_name"] == data["customer_name"]
+        assert rows[0]["comment"] == "Test"
+        assert rows[0]["status"] == "new"
+        assert rows[0]["telegram_user_id"] == 123
+        assert rows[0]["telegram_username"] == "test_user"
+
         bot.send_message.assert_awaited_once()
-        args, kwargs = bot.send_message.call_args
+        _, kwargs = bot.send_message.call_args
         assert kwargs["chat_id"] == settings.admin_chat_id
-        assert "Иван" in kwargs["text"]
+        assert "<code>1</code>" in kwargs["text"]
+        assert data["customer_name"] in kwargs["text"]
         assert "Test" in kwargs["text"]
 
-        # FSM cleared
         assert asyncio.run(state.get_state()) is None
         assert asyncio.run(state.get_data()) == {}
-
-        # User notified
         callback.message.edit_text.assert_any_await(
-            "Заявка отправлена. Администратор скоро свяжется с вами.",
+            BOOKING_SUCCESS_MESSAGE,
             reply_markup=None,
         )
         callback.message.answer.assert_any_await(
@@ -556,28 +579,57 @@ class TestConfirmation:
         )
         callback.answer.assert_awaited_once()
 
-    def test_confirm_api_error_keeps_state_and_shows_error(
+    def test_confirm_api_error_keeps_booking_id_and_retry_does_not_duplicate(
         self, callback: AsyncMock, state: FSMContext, settings: Settings
     ) -> None:
-        data = _complete_booking_data()
+        data = {**_complete_booking_data(), "comment": None}
         asyncio.run(state.update_data(**data))
         asyncio.run(state.set_state(BookingState.confirming))
 
+        failing_bot = AsyncMock()
+        failing_bot.send_message.side_effect = TelegramAPIError(
+            method=AsyncMock(), message="API Error"
+        )
+
+        asyncio.run(handle_booking_confirm(callback, state, failing_bot, settings))
+
+        assert asyncio.run(state.get_state()) == BookingState.confirming
+        state_data = asyncio.run(state.get_data())
+        assert state_data["booking_id"] == 1
+        assert isinstance(state_data["booking_created_at_utc"], str)
+        assert len(self._booking_rows(settings)) == 1
+        callback.message.answer.assert_awaited_once_with(BOOKING_NOTIFICATION_ERROR_MESSAGE)
+
+        callback.reset_mock()
+        callback.message = AsyncMock()
+        success_bot = AsyncMock()
+
+        asyncio.run(handle_booking_confirm(callback, state, success_bot, settings))
+
+        assert len(self._booking_rows(settings)) == 1
+        assert asyncio.run(state.get_state()) is None
+        success_bot.send_message.assert_awaited_once()
+
+    def test_confirm_storage_error_keeps_state_and_does_not_notify_admin(
+        self, callback: AsyncMock, state: FSMContext
+    ) -> None:
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            database_url="postgresql://localhost/bookings",
+            _env_file=None,
+        )
+        data = {**_complete_booking_data(), "comment": "Test"}
+        asyncio.run(state.update_data(**data))
+        asyncio.run(state.set_state(BookingState.confirming))
         bot = AsyncMock()
-        bot.send_message.side_effect = TelegramAPIError(method=AsyncMock(), message="API Error")
-        callback.from_user.username = "test_user"
 
         asyncio.run(handle_booking_confirm(callback, state, bot, settings))
 
-        # State and data kept
         assert asyncio.run(state.get_state()) == BookingState.confirming
-        assert (asyncio.run(state.get_data()))["customer_name"] == "Иван"
-
-        # User notified of error
-        callback.message.answer.assert_awaited_once_with(
-            "Произошла ошибка при отправке заявки. Пожалуйста, попробуйте ещё раз позже."
-        )
-        callback.answer.assert_awaited_once()
+        assert "booking_id" not in asyncio.run(state.get_data())
+        bot.send_message.assert_not_called()
+        callback.message.answer.assert_awaited_once_with(BOOKING_STORAGE_ERROR_MESSAGE)
 
     def test_confirm_incomplete_data_resets_flow(
         self, callback: AsyncMock, state: FSMContext, settings: Settings
@@ -592,6 +644,7 @@ class TestConfirmation:
             INCOMPLETE_BOOKING_MESSAGE,
             reply_markup=build_remove_reply(),
         )
+        assert self._booking_rows(settings) == []
 
     def test_restart_clears_data_and_returns_to_service_selection(
         self, callback: AsyncMock, state: FSMContext

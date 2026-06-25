@@ -1,5 +1,5 @@
-﻿import asyncio
-from unittest.mock import AsyncMock
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 from aiogram import Bot, Dispatcher
 from pydantic import SecretStr
@@ -38,13 +38,16 @@ def test_run_starts_polling_without_network(monkeypatch) -> None:
     dispatcher = loader.create_dispatcher(settings)
     start_polling = AsyncMock()
     close_session = AsyncMock()
+    init_database = MagicMock()
     monkeypatch.setattr(main, "get_settings", lambda: settings)
     monkeypatch.setattr(main, "create_bot", lambda _: bot)
     monkeypatch.setattr(main, "create_dispatcher", lambda s: dispatcher)
+    monkeypatch.setattr(main, "init_database", init_database)
     monkeypatch.setattr(dispatcher, "start_polling", start_polling)
     monkeypatch.setattr(bot.session, "close", close_session)
 
     asyncio.run(main.run())
 
+    init_database.assert_called_once_with(settings.database_url)
     start_polling.assert_awaited_once_with(bot)
     close_session.assert_awaited_once_with()

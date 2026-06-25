@@ -36,6 +36,7 @@ def format_admin_booking_message(
     user_id: int,
     username: str | None,
     created_at_utc: str,
+    booking_id: int | None = None,
 ) -> str:
     """Formats booking data for the administrator notification."""
     service_name = escape(_required_text(data, "service_name"))
@@ -51,9 +52,11 @@ def format_admin_booking_message(
         raise ValueError("Invalid booking field: comment")
 
     username_text = f"@{escape(username)}" if username else "Не указан"
+    booking_id_text = str(booking_id) if booking_id is not None else "Не указан"
 
     return (
         "<b>Новая заявка</b>\n\n"
+        f"<b>Номер заявки:</b> <code>{booking_id_text}</code>\n"
         f"<b>Услуга:</b> {service_name}\n"
         f"<b>Имя:</b> {customer_name}\n"
         f"<b>Телефон:</b> {phone}\n"
