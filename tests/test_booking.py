@@ -2,10 +2,13 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
+from pydantic import SecretStr
 
+from bot.config import Settings
 from bot.handlers.booking import (
     CANCEL_MESSAGE,
     COMMENT_PROMPT,
@@ -15,7 +18,6 @@ from bot.handlers.booking import (
     NAME_PROMPT_TEMPLATE,
     NON_TEXT_ERROR,
     PHONE_PROMPT,
-    READY_TO_SUBMIT_MESSAGE,
     SERVICE_PROMPT,
     _normalize_name,
     handle_booking_confirm,
@@ -512,22 +514,84 @@ class TestCommentInput:
 
 
 class TestConfirmation:
-    def test_confirm_keeps_data_and_marks_ready_to_submit(
-        self, callback: AsyncMock, state: FSMContext
+    @pytest.fixture
+    def settings(self) -> Settings:
+        return Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+
+    def test_confirm_success_clears_fsm_and_shows_success(
+        self, callback: AsyncMock, state: FSMContext, settings: Settings
     ) -> None:
-        data = {**_complete_booking_data(), "comment": None}
+        data = {**_complete_booking_data(), "comment": "Test"}
         asyncio.run(state.update_data(**data))
         asyncio.run(state.set_state(BookingState.confirming))
 
-        asyncio.run(handle_booking_confirm(callback, state))
+        bot = AsyncMock()
+        callback.from_user.username = "test_user"
 
-        assert asyncio.run(state.get_data()) == data
-        assert asyncio.run(state.get_state()) == BookingState.ready_to_submit
-        callback.message.edit_text.assert_awaited_once_with(
-            READY_TO_SUBMIT_MESSAGE,
+        asyncio.run(handle_booking_confirm(callback, state, bot, settings))
+
+        # Admin notified
+        bot.send_message.assert_awaited_once()
+        args, kwargs = bot.send_message.call_args
+        assert kwargs["chat_id"] == settings.admin_chat_id
+        assert "Иван" in kwargs["text"]
+        assert "Test" in kwargs["text"]
+
+        # FSM cleared
+        assert asyncio.run(state.get_state()) is None
+        assert asyncio.run(state.get_data()) == {}
+
+        # User notified
+        callback.message.edit_text.assert_any_await(
+            "Заявка отправлена. Администратор скоро свяжется с вами.",
             reply_markup=None,
         )
+        callback.message.answer.assert_any_await(
+            WELCOME_TEXT,
+            reply_markup=build_main_menu(),
+        )
         callback.answer.assert_awaited_once()
+
+    def test_confirm_api_error_keeps_state_and_shows_error(
+        self, callback: AsyncMock, state: FSMContext, settings: Settings
+    ) -> None:
+        data = _complete_booking_data()
+        asyncio.run(state.update_data(**data))
+        asyncio.run(state.set_state(BookingState.confirming))
+
+        bot = AsyncMock()
+        bot.send_message.side_effect = TelegramAPIError(method=AsyncMock(), message="API Error")
+        callback.from_user.username = "test_user"
+
+        asyncio.run(handle_booking_confirm(callback, state, bot, settings))
+
+        # State and data kept
+        assert asyncio.run(state.get_state()) == BookingState.confirming
+        assert (asyncio.run(state.get_data()))["customer_name"] == "Иван"
+
+        # User notified of error
+        callback.message.answer.assert_awaited_once_with(
+            "Произошла ошибка при отправке заявки. Пожалуйста, попробуйте ещё раз позже."
+        )
+        callback.answer.assert_awaited_once()
+
+    def test_confirm_incomplete_data_resets_flow(
+        self, callback: AsyncMock, state: FSMContext, settings: Settings
+    ) -> None:
+        asyncio.run(state.update_data(service_name="Test"))
+        asyncio.run(state.set_state(BookingState.confirming))
+
+        asyncio.run(handle_booking_confirm(callback, state, AsyncMock(), settings))
+
+        assert asyncio.run(state.get_state()) is None
+        callback.message.answer.assert_any_await(
+            INCOMPLETE_BOOKING_MESSAGE,
+            reply_markup=build_remove_reply(),
+        )
 
     def test_restart_clears_data_and_returns_to_service_selection(
         self, callback: AsyncMock, state: FSMContext
@@ -555,7 +619,12 @@ class TestRouter:
     def test_booking_router_is_registered_in_dispatcher(self) -> None:
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         assert len(dispatcher.sub_routers) == 2
 
         booking_router = dispatcher.sub_routers[1]
@@ -569,7 +638,12 @@ class TestRouter:
     def test_confirmation_callbacks_have_confirming_state_filter(self) -> None:
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         booking_router = dispatcher.sub_routers[1]
         handlers = {
             handler.callback.__name__: handler for handler in booking_router.callback_query.handlers
@@ -583,8 +657,13 @@ class TestRouter:
     def test_dispatcher_can_be_created_multiple_times(self) -> None:
         from bot.loader import create_dispatcher
 
-        d1 = create_dispatcher()
-        d2 = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        d1 = create_dispatcher(settings)
+        d2 = create_dispatcher(settings)
         assert len(d1.sub_routers) == 2
         assert len(d2.sub_routers) == 2
 
@@ -592,7 +671,12 @@ class TestRouter:
         """Cancel handler must be registered first so it takes priority."""
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -604,7 +688,12 @@ class TestRouter:
         """Cancel handler's StateFilter covers entering_name, entering_phone, entering_comment."""
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -621,7 +710,12 @@ class TestRouter:
         """Skip comment handler must be registered before generic text handler."""
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -635,7 +729,12 @@ class TestRouter:
         """Contact handler must be registered before phone text handler."""
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -650,7 +749,12 @@ class TestRouter:
         """Non-text fallback must be registered after text handler."""
         from bot.loader import create_dispatcher
 
-        dispatcher = create_dispatcher()
+        settings = Settings(
+            bot_token=SecretStr("123:abc"),
+            admin_chat_id=98765,
+            _env_file=None,
+        )
+        dispatcher = create_dispatcher(settings)
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
