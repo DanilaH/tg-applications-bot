@@ -102,3 +102,18 @@ def create_booking(database_url: str, booking: BookingCreate) -> int:
         raise BookingRepositoryError("SQLite did not return a booking id")
 
     return booking_id
+
+
+def update_booking_status(database_url: str, booking_id: int, status: str) -> bool:
+    if status not in ("accepted", "declined"):
+        raise BookingRepositoryError(f"Invalid booking status: {status}")
+
+    try:
+        with _connect(database_url) as connection:
+            cursor = connection.execute(
+                "UPDATE bookings SET status = ? WHERE id = ?",
+                (status, booking_id),
+            )
+            return cursor.rowcount > 0
+    except sqlite3.Error as exc:
+        raise BookingRepositoryError("Could not update booking status") from exc

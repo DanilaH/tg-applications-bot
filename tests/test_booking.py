@@ -566,6 +566,14 @@ class TestConfirmation:
         assert "<code>1</code>" in kwargs["text"]
         assert data["customer_name"] in kwargs["text"]
         assert "Test" in kwargs["text"]
+        assert kwargs["reply_markup"] is not None
+        # Check that it's an InlineKeyboardMarkup with admin action buttons
+        markup = kwargs["reply_markup"]
+        assert any(
+            "admin:booking:accept:1" in button.callback_data
+            for row in markup.inline_keyboard
+            for button in row
+        )
 
         assert asyncio.run(state.get_state()) is None
         assert asyncio.run(state.get_data()) == {}
@@ -673,9 +681,9 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        assert len(dispatcher.sub_routers) == 2
+        assert len(dispatcher.sub_routers) == 3
 
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         assert booking_router.name == "bot.handlers.booking"
         # 5 callback + 9 message handlers
         assert len(booking_router.callback_query.handlers) == 5
@@ -687,7 +695,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = {
             handler.callback.__name__: handler for handler in booking_router.callback_query.handlers
         }
@@ -702,15 +710,15 @@ class TestRouter:
 
         d1 = create_dispatcher()
         d2 = create_dispatcher()
-        assert len(d1.sub_routers) == 2
-        assert len(d2.sub_routers) == 2
+        assert len(d1.sub_routers) == 3
+        assert len(d2.sub_routers) == 3
 
     def test_text_cancel_registered_before_name_input(self) -> None:
         """Cancel handler must be registered first so it takes priority."""
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         # First handler should be text cancel
@@ -722,7 +730,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         cancel_handler = handlers[0]
@@ -739,7 +747,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         # Find skip_comment and comment_input positions
@@ -753,7 +761,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         names = [h.callback.__name__ for h in handlers]
@@ -768,7 +776,7 @@ class TestRouter:
         from bot.loader import create_dispatcher
 
         dispatcher = create_dispatcher()
-        booking_router = dispatcher.sub_routers[1]
+        booking_router = dispatcher.sub_routers[2]
         handlers = booking_router.message.handlers
 
         names = [h.callback.__name__ for h in handlers]
