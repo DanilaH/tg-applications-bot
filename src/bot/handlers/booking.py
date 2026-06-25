@@ -148,8 +148,8 @@ async def handle_booking_confirm(
             admin_chat_id=settings.admin_chat_id,
             text=admin_text,
         )
-    except TelegramAPIError as e:
-        logger.error("Failed to send admin notification: %s", e)
+    except TelegramAPIError:
+        logger.error("Failed to send admin notification due to Telegram API error")
         await callback.message.answer(
             "Произошла ошибка при отправке заявки. Пожалуйста, попробуйте ещё раз позже."
         )

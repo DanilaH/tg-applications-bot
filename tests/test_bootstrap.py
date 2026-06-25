@@ -21,6 +21,10 @@ def test_loader_creates_telegram_components_without_network() -> None:
     assert isinstance(bot, Bot)
     assert isinstance(dispatcher, Dispatcher)
     assert dispatcher["settings"] == settings
+
+    # Check optionality
+    d2 = loader.create_dispatcher()
+    assert "settings" not in d2.workflow_data
     asyncio.run(bot.session.close())
 
 
@@ -36,7 +40,7 @@ def test_run_starts_polling_without_network(monkeypatch) -> None:
     close_session = AsyncMock()
     monkeypatch.setattr(main, "get_settings", lambda: settings)
     monkeypatch.setattr(main, "create_bot", lambda _: bot)
-    monkeypatch.setattr(main, "create_dispatcher", lambda _: dispatcher)
+    monkeypatch.setattr(main, "create_dispatcher", lambda s: dispatcher)
     monkeypatch.setattr(dispatcher, "start_polling", start_polling)
     monkeypatch.setattr(bot.session, "close", close_session)
 

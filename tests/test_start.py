@@ -29,15 +29,7 @@ def test_start_handler_sends_welcome_message() -> None:
 
 
 def test_start_router_is_registered() -> None:
-    from pydantic import SecretStr
-
-    from bot.config import Settings
-    settings = Settings(
-        bot_token=SecretStr("123:abc"),
-        admin_chat_id=98765,
-        _env_file=None,
-    )
-    dispatcher = create_dispatcher(settings)
+    dispatcher = create_dispatcher()
 
     assert len(dispatcher.sub_routers) >= 1
     start_router = dispatcher.sub_routers[0]

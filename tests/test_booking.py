@@ -619,12 +619,7 @@ class TestRouter:
     def test_booking_router_is_registered_in_dispatcher(self) -> None:
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         assert len(dispatcher.sub_routers) == 2
 
         booking_router = dispatcher.sub_routers[1]
@@ -638,12 +633,7 @@ class TestRouter:
     def test_confirmation_callbacks_have_confirming_state_filter(self) -> None:
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         booking_router = dispatcher.sub_routers[1]
         handlers = {
             handler.callback.__name__: handler for handler in booking_router.callback_query.handlers
@@ -657,13 +647,8 @@ class TestRouter:
     def test_dispatcher_can_be_created_multiple_times(self) -> None:
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        d1 = create_dispatcher(settings)
-        d2 = create_dispatcher(settings)
+        d1 = create_dispatcher()
+        d2 = create_dispatcher()
         assert len(d1.sub_routers) == 2
         assert len(d2.sub_routers) == 2
 
@@ -671,12 +656,7 @@ class TestRouter:
         """Cancel handler must be registered first so it takes priority."""
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -688,12 +668,7 @@ class TestRouter:
         """Cancel handler's StateFilter covers entering_name, entering_phone, entering_comment."""
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -710,12 +685,7 @@ class TestRouter:
         """Skip comment handler must be registered before generic text handler."""
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -729,12 +699,7 @@ class TestRouter:
         """Contact handler must be registered before phone text handler."""
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
@@ -749,12 +714,7 @@ class TestRouter:
         """Non-text fallback must be registered after text handler."""
         from bot.loader import create_dispatcher
 
-        settings = Settings(
-            bot_token=SecretStr("123:abc"),
-            admin_chat_id=98765,
-            _env_file=None,
-        )
-        dispatcher = create_dispatcher(settings)
+        dispatcher = create_dispatcher()
         booking_router = dispatcher.sub_routers[1]
         handlers = booking_router.message.handlers
 
