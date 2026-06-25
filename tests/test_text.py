@@ -1,0 +1,64 @@
+import pytest
+
+from bot.utils.text import format_booking_summary
+
+
+def test_format_booking_summary_with_comment() -> None:
+    summary = format_booking_summary(
+        {
+            "service_name": "Стрижка + борода",
+            "customer_name": "Иван",
+            "phone": "+79991234567",
+            "comment": "После 18:00",
+        }
+    )
+
+    assert summary == (
+        "<b>Проверьте заявку</b>\n\n"
+        "<b>Услуга:</b> Стрижка + борода\n"
+        "<b>Имя:</b> Иван\n"
+        "<b>Телефон:</b> +79991234567\n"
+        "<b>Комментарий:</b> После 18:00"
+    )
+
+
+def test_format_booking_summary_without_comment() -> None:
+    summary = format_booking_summary(
+        {
+            "service_name": "Консультация",
+            "customer_name": "Анна",
+            "phone": "1234567890",
+            "comment": None,
+        }
+    )
+
+    assert "<b>Комментарий:</b> Не указан" in summary
+
+
+def test_format_booking_summary_escapes_dynamic_values() -> None:
+    summary = format_booking_summary(
+        {
+            "service_name": "Стрижка & уход",
+            "customer_name": '<Иван "Тест">',
+            "phone": "+1234567890",
+            "comment": "Хочу <вечером> & без очереди",
+        }
+    )
+
+    assert "Стрижка &amp; уход" in summary
+    assert "&lt;Иван &quot;Тест&quot;&gt;" in summary
+    assert "Хочу &lt;вечером&gt; &amp; без очереди" in summary
+
+
+@pytest.mark.parametrize("missing_key", ["service_name", "customer_name", "phone"])
+def test_format_booking_summary_requires_complete_data(missing_key: str) -> None:
+    data = {
+        "service_name": "Консультация",
+        "customer_name": "Анна",
+        "phone": "1234567890",
+        "comment": None,
+    }
+    del data[missing_key]
+
+    with pytest.raises(ValueError):
+        format_booking_summary(data)

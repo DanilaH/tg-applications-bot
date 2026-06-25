@@ -49,6 +49,31 @@ def build_name_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def build_confirmation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Подтвердить",
+                    callback_data="booking:confirm",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Заполнить заново",
+                    callback_data="booking:restart",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data="booking:cancel",
+                )
+            ],
+        ]
+    )
+
+
 def build_phone_keyboard() -> ReplyKeyboardMarkup:
     """Build a reply keyboard with a request-contact button and a cancel button."""
     return ReplyKeyboardMarkup(

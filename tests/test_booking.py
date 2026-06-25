@@ -11,11 +11,15 @@ from bot.handlers.booking import (
     COMMENT_PROMPT,
     CONFIRMING_MESSAGE,
     EMPTY_COMMENT_ERROR,
+    INCOMPLETE_BOOKING_MESSAGE,
     NAME_PROMPT_TEMPLATE,
     NON_TEXT_ERROR,
     PHONE_PROMPT,
+    READY_TO_SUBMIT_MESSAGE,
     SERVICE_PROMPT,
     _normalize_name,
+    handle_booking_confirm,
+    handle_booking_restart,
     handle_booking_start,
     handle_comment_input,
     handle_contact,
@@ -32,6 +36,7 @@ from bot.handlers.booking import (
 from bot.handlers.start import WELCOME_TEXT
 from bot.keyboards.booking import (
     build_comment_keyboard,
+    build_confirmation_keyboard,
     build_name_keyboard,
     build_phone_keyboard,
     build_remove_reply,
@@ -41,6 +46,7 @@ from bot.keyboards.main_menu import build_main_menu
 from bot.services.catalog import ALLOWED_SERVICE_IDS, ALLOWED_SERVICES, get_service
 from bot.states.booking import BookingState
 from bot.utils.phone import normalize_phone
+from bot.utils.text import format_booking_summary
 
 
 def _make_fsm_context() -> FSMContext:
@@ -48,6 +54,15 @@ def _make_fsm_context() -> FSMContext:
     ctx = FSMContext(storage=storage, key="test_user")
     asyncio.run(ctx.clear())
     return ctx
+
+
+def _complete_booking_data() -> dict[str, object]:
+    return {
+        "service_id": "combo",
+        "service_name": "Стрижка + борода",
+        "customer_name": "Иван",
+        "phone": "+79991234567",
+    }
 
 
 # ===================================================================
@@ -168,6 +183,15 @@ class TestKeyboards:
         assert button.text == "Отмена"
         assert button.callback_data == "booking:cancel"
 
+    def test_confirmation_keyboard_has_expected_actions(self) -> None:
+        keyboard = build_confirmation_keyboard()
+        buttons = [row[0] for row in keyboard.inline_keyboard]
+        assert [(button.text, button.callback_data) for button in buttons] == [
+            ("Подтвердить", "booking:confirm"),
+            ("Заполнить заново", "booking:restart"),
+            ("Отмена", "booking:cancel"),
+        ]
+
     def test_phone_keyboard_has_contact_and_cancel(self) -> None:
         kb = build_phone_keyboard()
         assert len(kb.keyboard) == 2
@@ -246,9 +270,7 @@ class TestServiceSelection:
         asyncio.run(handle_service_selection(callback, state))
         assert asyncio.run(state.get_data()) == {}
         assert asyncio.run(state.get_state()) == BookingState.choosing_service
-        callback.answer.assert_awaited_once_with(
-            "Эта услуга недоступна", show_alert=True
-        )
+        callback.answer.assert_awaited_once_with("Эта услуга недоступна", show_alert=True)
 
 
 # ===================================================================
@@ -264,6 +286,7 @@ class TestCancel:
             BookingState.entering_name,
             BookingState.entering_phone,
             BookingState.entering_comment,
+            BookingState.confirming,
         ],
     )
     def test_inline_cancel_clears_state_on_each_step(
@@ -296,13 +319,9 @@ class TestCancel:
         assert asyncio.run(state.get_data()) == {}
         assert asyncio.run(state.get_state()) is None
         # First call removes reply keyboard
-        message.answer.assert_any_await(
-            CANCEL_MESSAGE, reply_markup=build_remove_reply()
-        )
+        message.answer.assert_any_await(CANCEL_MESSAGE, reply_markup=build_remove_reply())
         # Second call shows main menu
-        message.answer.assert_any_await(
-            WELCOME_TEXT, reply_markup=build_main_menu()
-        )
+        message.answer.assert_any_await(WELCOME_TEXT, reply_markup=build_main_menu())
 
 
 # ===================================================================
@@ -311,18 +330,14 @@ class TestCancel:
 
 
 class TestNameInput:
-    def test_valid_name_saves_and_transitions(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_valid_name_saves_and_transitions(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_name))
         message.text = "  Иван  "
         asyncio.run(handle_name_input(message, state))
         data = asyncio.run(state.get_data())
         assert data["customer_name"] == "Иван"
         assert asyncio.run(state.get_state()) == BookingState.entering_phone
-        message.answer.assert_awaited_once_with(
-            PHONE_PROMPT, reply_markup=build_phone_keyboard()
-        )
+        message.answer.assert_awaited_once_with(PHONE_PROMPT, reply_markup=build_phone_keyboard())
 
     def test_empty_name_shows_error_and_keeps_state(
         self, message: AsyncMock, state: FSMContext
@@ -343,9 +358,7 @@ class TestNameInput:
         assert asyncio.run(state.get_data()) == {}
         assert asyncio.run(state.get_state()) == BookingState.entering_name
 
-    def test_non_text_name_shows_error(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_non_text_name_shows_error(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_name))
         asyncio.run(handle_non_text_name(message))
         assert asyncio.run(state.get_state()) == BookingState.entering_name
@@ -380,9 +393,7 @@ class TestPhoneInput:
         assert asyncio.run(state.get_data()) == {}
         assert asyncio.run(state.get_state()) == BookingState.entering_phone
 
-    def test_own_contact_saves_and_transitions(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_own_contact_saves_and_transitions(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_phone))
         message.contact = MagicMock()
         message.contact.user_id = 123
@@ -392,9 +403,7 @@ class TestPhoneInput:
         assert data["phone"] == "+79991234567"
         assert asyncio.run(state.get_state()) == BookingState.entering_comment
 
-    def test_foreign_contact_rejected(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_foreign_contact_rejected(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_phone))
         message.contact = MagicMock()
         message.contact.user_id = 999
@@ -404,9 +413,7 @@ class TestPhoneInput:
         assert asyncio.run(state.get_state()) == BookingState.entering_phone
         message.answer.assert_awaited_once()
 
-    def test_non_text_phone_says_error(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_non_text_phone_says_error(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_phone))
         asyncio.run(handle_non_text_phone(message))
         assert asyncio.run(state.get_state()) == BookingState.entering_phone
@@ -419,22 +426,28 @@ class TestPhoneInput:
 
 
 class TestCommentInput:
-    def test_valid_comment_saves_and_transitions(
+    def test_valid_comment_shows_summary_and_transitions(
         self, message: AsyncMock, state: FSMContext
     ) -> None:
+        data = _complete_booking_data()
+        asyncio.run(state.update_data(**data))
         asyncio.run(state.set_state(BookingState.entering_comment))
         message.text = "Хочу после 18:00"
+
         asyncio.run(handle_comment_input(message, state))
-        data = asyncio.run(state.get_data())
-        assert data["comment"] == "Хочу после 18:00"
+
+        data["comment"] = "Хочу после 18:00"
+        assert asyncio.run(state.get_data()) == data
         assert asyncio.run(state.get_state()) == BookingState.confirming
-        message.answer.assert_awaited_once_with(
-            CONFIRMING_MESSAGE, reply_markup=build_remove_reply()
+        assert message.answer.await_count == 2
+        message.answer.assert_any_await(CONFIRMING_MESSAGE, reply_markup=build_remove_reply())
+        message.answer.assert_any_await(
+            format_booking_summary(data),
+            reply_markup=build_confirmation_keyboard(),
+            parse_mode="HTML",
         )
 
-    def test_empty_comment_shows_error(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_empty_comment_shows_error(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_comment))
         message.text = "   "
         asyncio.run(handle_comment_input(message, state))
@@ -442,34 +455,95 @@ class TestCommentInput:
         assert asyncio.run(state.get_state()) == BookingState.entering_comment
         message.answer.assert_awaited_once_with(EMPTY_COMMENT_ERROR)
 
-    def test_too_long_comment_shows_error(
-        self, message: AsyncMock, state: FSMContext
-    ) -> None:
+    def test_too_long_comment_shows_error(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_comment))
         message.text = "A" * 501
         asyncio.run(handle_comment_input(message, state))
         assert asyncio.run(state.get_data()) == {}
         assert asyncio.run(state.get_state()) == BookingState.entering_comment
 
-    def test_skip_saves_none_and_transitions(
+    def test_skip_shows_summary_without_comment(
         self, message: AsyncMock, state: FSMContext
     ) -> None:
+        data = _complete_booking_data()
+        asyncio.run(state.update_data(**data))
         asyncio.run(state.set_state(BookingState.entering_comment))
+
         asyncio.run(handle_skip_comment(message, state))
-        data = asyncio.run(state.get_data())
-        assert data["comment"] is None
+
+        data["comment"] = None
+        assert asyncio.run(state.get_data()) == data
         assert asyncio.run(state.get_state()) == BookingState.confirming
-        message.answer.assert_awaited_once_with(
-            CONFIRMING_MESSAGE, reply_markup=build_remove_reply()
+        message.answer.assert_any_await(
+            format_booking_summary(data),
+            reply_markup=build_confirmation_keyboard(),
+            parse_mode="HTML",
         )
 
-    def test_non_text_comment_shows_error(
+    def test_incomplete_data_resets_flow_safely(
         self, message: AsyncMock, state: FSMContext
     ) -> None:
+        asyncio.run(state.update_data(service_name="Консультация"))
+        asyncio.run(state.set_state(BookingState.entering_comment))
+
+        asyncio.run(handle_skip_comment(message, state))
+
+        assert asyncio.run(state.get_data()) == {}
+        assert asyncio.run(state.get_state()) is None
+        message.answer.assert_any_await(
+            INCOMPLETE_BOOKING_MESSAGE,
+            reply_markup=build_remove_reply(),
+        )
+        message.answer.assert_any_await(
+            WELCOME_TEXT,
+            reply_markup=build_main_menu(),
+        )
+
+    def test_non_text_comment_shows_error(self, message: AsyncMock, state: FSMContext) -> None:
         asyncio.run(state.set_state(BookingState.entering_comment))
         asyncio.run(handle_non_text_comment(message))
         assert asyncio.run(state.get_state()) == BookingState.entering_comment
         message.answer.assert_awaited_once()
+
+
+# ===================================================================
+# Confirmation
+# ===================================================================
+
+
+class TestConfirmation:
+    def test_confirm_keeps_data_and_marks_ready_to_submit(
+        self, callback: AsyncMock, state: FSMContext
+    ) -> None:
+        data = {**_complete_booking_data(), "comment": None}
+        asyncio.run(state.update_data(**data))
+        asyncio.run(state.set_state(BookingState.confirming))
+
+        asyncio.run(handle_booking_confirm(callback, state))
+
+        assert asyncio.run(state.get_data()) == data
+        assert asyncio.run(state.get_state()) == BookingState.ready_to_submit
+        callback.message.edit_text.assert_awaited_once_with(
+            READY_TO_SUBMIT_MESSAGE,
+            reply_markup=None,
+        )
+        callback.answer.assert_awaited_once()
+
+    def test_restart_clears_data_and_returns_to_service_selection(
+        self, callback: AsyncMock, state: FSMContext
+    ) -> None:
+        asyncio.run(state.update_data(**_complete_booking_data(), comment="Тест"))
+        asyncio.run(state.set_state(BookingState.confirming))
+
+        asyncio.run(handle_booking_restart(callback, state))
+
+        assert asyncio.run(state.get_data()) == {}
+        assert asyncio.run(state.get_state()) == BookingState.choosing_service
+        callback.message.edit_text.assert_awaited_once_with(
+            SERVICE_PROMPT,
+            reply_markup=build_service_keyboard(),
+        )
+        callback.answer.assert_awaited_once()
 
 
 # ===================================================================
@@ -486,11 +560,25 @@ class TestRouter:
 
         booking_router = dispatcher.sub_routers[1]
         assert booking_router.name == "bot.handlers.booking"
-        # 3 callback + 9 message handlers
-        assert len(booking_router.callback_query.handlers) == 3
+        # 5 callback + 9 message handlers
+        assert len(booking_router.callback_query.handlers) == 5
         # cancel (all states) + name/text + name/non-text + contact + phone/text
         # + phone/non-text + skip + comment/text + comment/non-text
         assert len(booking_router.message.handlers) == 9
+
+    def test_confirmation_callbacks_have_confirming_state_filter(self) -> None:
+        from bot.loader import create_dispatcher
+
+        dispatcher = create_dispatcher()
+        booking_router = dispatcher.sub_routers[1]
+        handlers = {
+            handler.callback.__name__: handler for handler in booking_router.callback_query.handlers
+        }
+
+        for name in ("handle_booking_confirm", "handle_booking_restart"):
+            raw_filter = handlers[name].filters[0].callback
+            assert isinstance(raw_filter, StateFilter)
+            assert {state.state for state in raw_filter.states} == {"BookingState:confirming"}
 
     def test_dispatcher_can_be_created_multiple_times(self) -> None:
         from bot.loader import create_dispatcher
@@ -541,9 +629,7 @@ class TestRouter:
         names = [h.callback.__name__ for h in handlers]
         skip_idx = names.index("handle_skip_comment")
         comment_idx = names.index("handle_comment_input")
-        assert skip_idx < comment_idx, (
-            f"skip at {skip_idx} must be before comment at {comment_idx}"
-        )
+        assert skip_idx < comment_idx, f"skip at {skip_idx} must be before comment at {comment_idx}"
 
     def test_contact_registered_before_phone_text(self) -> None:
         """Contact handler must be registered before phone text handler."""

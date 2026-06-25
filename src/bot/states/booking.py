@@ -7,3 +7,4 @@ class BookingState(StatesGroup):
     entering_phone = State()
     entering_comment = State()
     confirming = State()
+    ready_to_submit = State()
