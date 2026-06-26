@@ -89,29 +89,63 @@ journalctl -u booking-bot -f
 
 ---
 
-## Future Scaling: Docker Plan
+## Docker Deployment (Recommended for Portfolio/Demo)
 
-If you prefer containerization, here is the suggested approach:
+If you prefer containerization, you can run the bot using Docker and Docker Compose.
 
-### Dockerfile (Proposed)
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY pyproject.toml requirements.txt ./
-COPY src/ ./src/
-RUN pip install --no-cache-dir -r requirements.txt -e .
-CMD ["python", "-m", "bot.main"]
+### 1. Prerequisites
+Ensure you have Docker and Docker Compose installed on your system.
+
+### 2. Prepare Environment
+
+**Linux / macOS:**
+```bash
+# Clone the repo
+git clone <your_repo_url> /opt/booking-bot
+cd /opt/booking-bot
+
+# Create data directory for SQLite database
+mkdir -p data
+
+# Copy environment template
+cp .env.example .env
+# Edit .env with your favorite editor (e.g., nano)
+nano .env
 ```
 
-### docker-compose.yml (Proposed)
-```yaml
-services:
-  bot:
-    build: .
-    restart: always
-    env_file: .env
-    volumes:
-      - ./data:/app/data
+**Windows (PowerShell):**
+```powershell
+# Clone the repo
+git clone <your_repo_url> C:\booking-bot
+cd C:\booking-bot
+
+# Create data directory for SQLite database
+New-Item -ItemType Directory -Force -Path "data"
+
+# Copy environment template
+Copy-Item .env.example -Destination .env
+# Edit .env with your favorite editor
+notepad .env
+```
+
+> [!NOTE]
+> The `.env` file is used to securely pass configuration to the container via the `env_file` directive in `docker-compose.yml`.
+> The `./data` directory is mounted to `/app/data` inside the container as a volume to ensure the SQLite database (`bookings.sqlite3`) persists across container restarts and rebuilds.
+
+### 3. Run the Bot
+
+Start the container in detached mode:
+
+```bash
+docker compose up -d --build
+```
+
+### 4. Check Logs
+
+To view the bot logs:
+
+```bash
+docker compose logs -f
 ```
 
 ---
