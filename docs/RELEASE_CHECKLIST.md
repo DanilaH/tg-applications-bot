@@ -8,7 +8,8 @@ This document contains checklists to ensure the quality and security of the appl
 - [ ] Tests passed successfully: `python -m pytest`
 - [ ] Dependency consistency check passed: `python -m pip check`
 - [ ] No trailing whitespace or unresolved merge conflicts: `git diff --check`
-- [ ] No untracked files that should be committed: `rg "\?\?" src tests README.md .env.example docs Dockerfile docker-compose.yml .dockerignore`
+- [ ] No extra or untracked files left in the working tree: `git status --short` or `git ls-files --others --exclude-standard`
+- [ ] No mojibake or unresolved conflict markers in codebase: `rg "\?\?" src tests README.md .env.example docs Dockerfile docker-compose.yml .dockerignore`
 
 ## Checks Before Demo
 
