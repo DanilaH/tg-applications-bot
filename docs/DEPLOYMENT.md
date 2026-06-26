@@ -59,7 +59,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=booking-bot
 WorkingDirectory=/opt/booking-bot
 ExecStart=/opt/booking-bot/.venv/bin/python -m bot.main
 Restart=always
@@ -84,6 +84,9 @@ sudo systemctl status booking-bot
 journalctl -u booking-bot -f
 ```
 
+> [!NOTE]
+> For security, the bot runs under a dedicated `booking-bot` user. Ensure the directory belongs to them: `sudo chown -R booking-bot:booking-bot /opt/booking-bot`.
+
 ---
 
 ## Future Scaling: Docker Plan
@@ -94,9 +97,9 @@ If you prefer containerization, here is the suggested approach:
 ```dockerfile
 FROM python:3.12-slim
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY src/ ./bot/
+COPY pyproject.toml requirements.txt ./
+COPY src/ ./src/
+RUN pip install --no-cache-dir -r requirements.txt -e .
 CMD ["python", "-m", "bot.main"]
 ```
 
